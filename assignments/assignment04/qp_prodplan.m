@@ -36,14 +36,14 @@ vub = [];    % Upper bound on x
 % s.t. A*x <= b 
 
 % Quadratic objective (MODIFY THESE)
-G = [g11 g12 ;
-     g21 g22]; % Remember the factor 1/2 in the objective
-c = [c1 ; c2];
+G = [0.8    0;
+     0      0.4]; % Remember the factor 1/2 in the objective
+c = [-3     -2]';
 
 % Linear constraints (MODIFY THESE)
-A = [a11 a12 ; 
-     a21 a22];
-b = [b1 ; b2];
+A = [2      1; 
+     1      3];
+b = [8      15]';
 
 options = optimset('LargeScale','Off');
 [x,lambda] = quadprog1(G,c,A,b,[],[],vlb,vub,x0,options);
