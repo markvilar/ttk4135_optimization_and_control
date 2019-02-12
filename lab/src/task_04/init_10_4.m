@@ -11,8 +11,6 @@ clc;
 % The encoder for travel for Helicopter 2 is different from the rest.
 travel_gain = 1; %
 
-
-
 %% Physical constants
 m_h = 0.4; % Total mass of the motors.
 m_g = 0.03; % Effective mass of the helicopter.
@@ -56,7 +54,7 @@ S_p = (1 + L_p)^(-1);
 
 plot_pitch_response = 0;
 if plot_pitch_response
-    figure()
+    figure;
     step(S_p*Rp_max); hold on;
     step(C_p*S_p*Rp_max/Vd_max);
     legend('norm error', 'norm input')
@@ -82,101 +80,75 @@ S_e = (1 + L_e)^(-1);
 
 % Optimal trajectory travel
 T = 0.25;
-
-N = 100;
-
+N = 40;
 M = N;
-
-mx = 4;
-
-mu = 1;
-
+mx = 6;
+mu = 2;
 lambda0 = pi;
 
-x0 = [lambda0 0 0 0]';
-
+x0 = [lambda0 0 0 0 0 0]';
 z0 = zeros(N*mx+M*mu,1);
+z0(1:mx) = x0;
 
-q = 1;
+q1 = 1;
+q2 = 1;
 
-A1 = [1 T 0 0;0 1 -K_2*T 0;0 0 1 T;0 0 -K_1*K_pp*T 1-K_1*K_pd*T];
+A1 = [1 T 0 0 0 0;0 1 -K_2*T 0 0 0;0 0 1 T 0 0;0 0 -K_1*K_pp*T 1-K_1*K_pd*T 0 0;...
+    0 0 0 0 1 T;0 0 0 0 -K_3*K_ep*T 1-K_3*K_ed*T];
 
-B1 = [0;0;0;K_1*K_pp*T];
+B1 = [0 0;0 0;0 0;K_1*K_pp*T 0;0 0;0 K_3*K_pp*T];
 
 Aeq = gen_aeq(A1,B1,N,mx,mu);
-
 beq = zeros(N*mx,1);
+beq(1:mx) = A1*x0;
 
-beq(1:4) = A1*x0; 
-
-xl = [-inf -inf -30*pi/180 -inf]';
-
-xu = [inf inf 30*pi/180 inf]';
-
-ul = -30*pi/180;
-
-uu = 30*pi/180;
+xl = [-inf -30*pi/180 -(60*pi/180) -inf -inf -5*pi/180]';
+xu = [inf 30*pi/180 60*pi/180 inf inf 5*pi/180]';
+ul = [-(60*pi/180),-inf]';
+uu = [60*pi/180,inf]';
 
 [vlb, vub] = gen_constraints(N,M,xl,xu,ul,uu); 
 
-Q1 = [2 0 0 0;0 0 0 0;0 0 0 0;0 0 0 0];
+Q1 = 2*diag([1 0 0 0 0 0]);
 
-P1 = 2*q;
+P1 = 2*diag([q1 q2]);
 
 Q = gen_q(Q1,P1,N,M);
 
 f = zeros(N*mx+M*mu,1);
 
-[Z,fval,exitflag,output,lambda] = quadprog(Q,f,[],[],Aeq,beq,vlb,vub,z0);
+fun = @(z) (1/2)*z'*Q*z;
+
+options = optimoptions('fmincon','Algorithm','sqp', 'MaxFunEvals', 400000);
+
+[Z, fval, exitflag, output] = fmincon(fun,z0,[],[],Aeq,beq,vlb,vub,@nonlcon,options);
 
 Time = (0:T:T*(N-1))';
 
-pitch_ref = Z(401:1:500);
+n_idle = 30;
 
-pitch = Z(3:4:399);
+t = (0:T:T*((length(Z)/(mx+mu))+2*n_idle -1));
 
-travel = Z(1:4:397);
+u_star_pitch = timeseries([zeros(n_idle,1);Z(N*mx+1:mu:N*mx+N*mu-1);zeros(n_idle,1)],t);
 
-x_star = [zeros(1,30),Z(1:4:397)',zeros(1,30);zeros(1,30),Z(2:4:398)',...
-    zeros(1,30);zeros(1,30),Z(3:4:399)',zeros(1,30);zeros(1,30),...
-    Z(4:4:400)',zeros(1,30)];
+u_star_elev = timeseries([zeros(n_idle,1);Z(N*mx+2:mu:N*mx+N*mu);zeros(n_idle,1)],t);
 
-u_star = [zeros(30,1);Z(401:1:500);zeros(30,1)];
+x_star = [zeros(1,n_idle),Z(1:mx:N*mx-5)',zeros(1,n_idle);
+          zeros(1,n_idle),Z(2:mx:N*mx-4)',zeros(1,n_idle);
+          zeros(1,n_idle),Z(3:mx:N*mx-3)',zeros(1,n_idle);
+          zeros(1,n_idle),Z(4:mx:N*mx-2)',zeros(1,n_idle);
+          zeros(1,n_idle),Z(5:mx:N*mx-1)',zeros(1,n_idle);
+          zeros(1,n_idle),Z(6:mx:N*mx)',zeros(1,n_idle)];
 
-t = (0:T:T*(length(u_star)-1));
+x_star(1,1:n_idle) = pi;
 
-input = timeseries(u_star,t);
+
 
 %% Optimal control - LQ
-x_star_s = timeseries(x_star,t);
+x_star_s = timeseries(x_star, t);
 
-Q_lq = diag([1 1 1 1]);
+Q_lq = diag([10 10 1 1 1 1]);
 
-R_lq = 1;
+R_lq = diag([1 1]);
 
 [K,S,E] = dlqr(A1,B1,Q_lq,R_lq);
-
-figure;
-hold on
-plot(Time,pitch_ref,Time,pitch);
-xlabel('Time [s]');
-ylabel('Angle [Rad]');
-legend('Pitch reference','Pitch');
-title('Task 10.2.3, q = 0.1');
-
-figure;
-hold on
-plot(Time,travel);
-xlabel('Time [s]');
-ylabel('Angle [rad]');
-title('Task 10.2.3, q = 1, Travel');
-
-plot_elev_response = 0;
-if plot_elev_response
-    figure()
-    step(S_e*Re_max);
-    hold on;
-    step(C_e*S_e*Re_max/Vs_max);
-    legend('norm error', 'norm input')
-    title('Elevation closed loop response')
-end
