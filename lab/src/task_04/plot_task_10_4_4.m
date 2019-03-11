@@ -1,4 +1,7 @@
-load('u_pitch_plot.mat');
+
+results_folder = '../../results/task_04/results_04_03/q1=1_q2=1';
+
+load(resu'u_pitch_plot.mat');
 load('u_elev_plot.mat');
 load('u_star_pitch_plot.mat');
 load('u_star_elev_plot.mat');
@@ -42,3 +45,5 @@ title('Task 10.4.4');
 % xlabel('Time [s]');
 % ylabel('Angle [rad]');
 % title('Task 10.4.4');
+
+end
