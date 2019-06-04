@@ -1,1 +1,1 @@
-# tttk4135_optimization_and_control
+# ttk4135_optimization_and_control
